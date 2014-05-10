@@ -8,7 +8,7 @@ Boids also gives us an insight into how software experiments can be used as a to
 
 Implementation
 --------------
-I propose for my project an OpenGL implementation that models the behaviors of a school of fish.  The simulation will be written using Python and PyOpenGL. 2D and 3D views should be implemented, with incremental behavioural features added.  Each individual fish will follow the three boid rules:
+I propose for my project an OpenGL implementation that models the behaviors of a school of fish.  The simulation will be written using C with the FreeGLUT library. 2D and 3D views should be implemented, with incremental behavioural features added.  Each individual fish will follow the three boid rules:
 * Rule 1: Each fish will move towards the centre of mass of neighbouring fish
 * Rule 2: Fish will try and keep a small distance away from other objects (including other fish).
 * Rule 3: Fish will try to match velocity with nearby fish.
