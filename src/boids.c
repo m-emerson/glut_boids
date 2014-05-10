@@ -45,7 +45,7 @@
 #include <time.h>
 #include <GL/glut.h>
 
-#define MAXOBJS 10000
+#define MAXBOIDS 10000
 #define MAXSELECT 100
 #define MAXFEED 300
 #define	SOLID 1
@@ -61,12 +61,13 @@ float zRotation = 90.0;
 float zoom = 1.0;
 GLint objectCount;
 GLint numObjects;
-struct object {
+struct boid {
   float v1[2];
   float v2[2];
   float v3[2];
   float color[3];
-} objects[MAXOBJS];
+  float rotate;
+} boids[MAXBOIDS];
 GLenum linePoly = GL_FALSE;
 
 static void
@@ -75,8 +76,8 @@ InitObjects(GLint num)
   GLint i;
   float x, y;
 
-  if (num > MAXOBJS) {
-    num = MAXOBJS;
+  if (num > MAXBOIDS) {
+    num = MAXBOIDS;
   }
   if (num < 1) {
     num = 1;
@@ -88,15 +89,18 @@ InitObjects(GLint num)
     x = (rand() % 300) - 150;
     y = (rand() % 300) - 150;
 
-    objects[i].v1[0] = x;
-    objects[i].v2[0] = x + 10;
-    objects[i].v3[0] = x + 5;
-    objects[i].v1[1] = y;
-    objects[i].v2[1] = y;
-    objects[i].v3[1] = y + 20;
-    objects[i].color[0] = ((rand() % 100) + 50) / 150.0;
-    objects[i].color[1] = ((rand() % 100) + 50) / 150.0;
-    objects[i].color[2] = ((rand() % 100) + 50) / 150.0;
+    boids[i].v1[0] = x;
+    boids[i].v2[0] = x + 10;
+    boids[i].v3[0] = x + 5;
+    boids[i].v1[1] = y;
+    boids[i].v2[1] = y;
+    boids[i].v3[1] = y + 20;
+    boids[i].color[0] = ((rand() % 100) + 50) / 150.0;
+    boids[i].color[1] = ((rand() % 100) + 50) / 150.0;
+    boids[i].color[2] = ((rand() % 100) + 50) / 150.0;
+
+    // Initialise rotation angle to 0
+    boids[i].rotate = 0.0f;
   }
 }
 
@@ -125,12 +129,16 @@ Render(GLenum mode)
     if (mode == GL_SELECT) {
       glLoadName(i);
     }
-    glColor3fv(objects[i].color);
+    glRotatef(boids[i].rotate, 0.0f, 0.0f, 1.0f);
+    glColor3fv(boids[i].color);
     glBegin(GL_POLYGON);
-    glVertex2fv(objects[i].v1);
-    glVertex2fv(objects[i].v2);
-    glVertex2fv(objects[i].v3);
+    glVertex2fv(boids[i].v1);
+    glVertex2fv(boids[i].v2);
+    glVertex2fv(boids[i].v3);
     glEnd();
+    
+    // Make the fish rotate
+    boids[i].rotate += 2.0f;
   }
 }
 
@@ -172,15 +180,15 @@ DoSelect(GLint x, GLint y)
 static void
 RecolorTri(GLint h)
 {
-  objects[h].color[0] = ((rand() % 100) + 50) / 150.0;
-  objects[h].color[1] = ((rand() % 100) + 50) / 150.0;
-  objects[h].color[2] = ((rand() % 100) + 50) / 150.0;
+  boids[h].color[0] = ((rand() % 100) + 50) / 150.0;
+  boids[h].color[1] = ((rand() % 100) + 50) / 150.0;
+  boids[h].color[2] = ((rand() % 100) + 50) / 150.0;
 }
 
 static void
 DeleteTri(GLint h)
 {
-  objects[h] = objects[objectCount - 1];
+  boids[h] = boids[objectCount - 1];
   objectCount--;
 }
 
@@ -191,21 +199,21 @@ GrowTri(GLint h)
   float *oldV;
   GLint i;
 
-  v[0] = objects[h].v1[0] + objects[h].v2[0] + objects[h].v3[0];
-  v[1] = objects[h].v1[1] + objects[h].v2[1] + objects[h].v3[1];
+  v[0] = boids[h].v1[0] + boids[h].v2[0] + boids[h].v3[0];
+  v[1] = boids[h].v1[1] + boids[h].v2[1] + boids[h].v3[1];
   v[0] /= 3;
   v[1] /= 3;
 
   for (i = 0; i < 3; i++) {
     switch (i) {
     case 0:
-      oldV = objects[h].v1;
+      oldV = boids[h].v1;
       break;
     case 1:
-      oldV = objects[h].v2;
+      oldV = boids[h].v2;
       break;
     case 2:
-      oldV = objects[h].v3;
+      oldV = boids[h].v3;
       break;
     }
     oldV[0] = 1.5 * (oldV[0] - v[0]) + v[0];
