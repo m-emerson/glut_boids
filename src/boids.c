@@ -88,12 +88,12 @@ InitObjects(GLint num)
     x = (rand() % 300) - 150;
     y = (rand() % 300) - 150;
 
-    objects[i].v1[0] = x + (rand() % 50) - 25;
-    objects[i].v2[0] = x + (rand() % 50) - 25;
-    objects[i].v3[0] = x + (rand() % 50) - 25;
-    objects[i].v1[1] = y + (rand() % 50) - 25;
-    objects[i].v2[1] = y + (rand() % 50) - 25;
-    objects[i].v3[1] = y + (rand() % 50) - 25;
+    objects[i].v1[0] = x;
+    objects[i].v2[0] = x + 10;
+    objects[i].v3[0] = x + 5;
+    objects[i].v1[1] = y;
+    objects[i].v2[1] = y;
+    objects[i].v3[1] = y + 20;
     objects[i].color[0] = ((rand() % 100) + 50) / 150.0;
     objects[i].color[1] = ((rand() % 100) + 50) / 150.0;
     objects[i].color[2] = ((rand() % 100) + 50) / 150.0;
