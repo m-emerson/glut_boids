@@ -1,43 +1,3 @@
-
-/* Copyright (c) Mark J. Kilgard, 1994. */
-
-/**
- * (c) Copyright 1993, Silicon Graphics, Inc.
- * ALL RIGHTS RESERVED 
- * Permission to use, copy, modify, and distribute this software for 
- * any purpose and without fee is hereby granted, provided that the above
- * copyright notice appear in all copies and that both the copyright notice
- * and this permission notice appear in supporting documentation, and that 
- * the name of Silicon Graphics, Inc. not be used in advertising
- * or publicity pertaining to distribution of the software without specific,
- * written prior permission. 
- *
- * THE MATERIAL EMBODIED ON THIS SOFTWARE IS PROVIDED TO YOU "AS-IS"
- * AND WITHOUT WARRANTY OF ANY KIND, EXPRESS, IMPLIED OR OTHERWISE,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTY OF MERCHANTABILITY OR
- * FITNESS FOR A PARTICULAR PURPOSE.  IN NO EVENT SHALL SILICON
- * GRAPHICS, INC.  BE LIABLE TO YOU OR ANYONE ELSE FOR ANY DIRECT,
- * SPECIAL, INCIDENTAL, INDIRECT OR CONSEQUENTIAL DAMAGES OF ANY
- * KIND, OR ANY DAMAGES WHATSOEVER, INCLUDING WITHOUT LIMITATION,
- * LOSS OF PROFIT, LOSS OF USE, SAVINGS OR REVENUE, OR THE CLAIMS OF
- * THIRD PARTIES, WHETHER OR NOT SILICON GRAPHICS, INC.  HAS BEEN
- * ADVISED OF THE POSSIBILITY OF SUCH LOSS, HOWEVER CAUSED AND ON
- * ANY THEORY OF LIABILITY, ARISING OUT OF OR IN CONNECTION WITH THE
- * POSSESSION, USE OR PERFORMANCE OF THIS SOFTWARE.
- * 
- * US Government Users Restricted Rights 
- * Use, duplication, or disclosure by the Government is subject to
- * restrictions set forth in FAR 52.227.19(c)(2) or subparagraph
- * (c)(1)(ii) of the Rights in Technical Data and Computer Software
- * clause at DFARS 252.227-7013 and/or in similar or successor
- * clauses in the FAR or the DOD or NASA FAR Supplement.
- * Unpublished-- rights reserved under the copyright laws of the
- * United States.  Contractor/manufacturer is Silicon Graphics,
- * Inc., 2011 N.  Shoreline Blvd., Mountain View, CA 94039-7311.
- *
- * OpenGL(TM) is a trademark of Silicon Graphics, Inc.
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -46,23 +6,40 @@
 #include <GL/glut.h>
 #include "boids.h"
 
-#define MAXBOIDS 10
+#define MAXBOIDS 20
 #define MAXSELECT 100
 #define MAXFEED 300
 #define	SOLID 1
 #define	LINE 2
 #define	POINT 3
 
-GLint windW = 500, windH = 500;
-
+GLint windW = 300, windH = 300;
 GLuint selectBuf[MAXSELECT];
 GLfloat feedBuf[MAXFEED];
 GLint vp[4];
 float zRotation = 90.0;
 float zoom = 1.0;
-float refresh = 30;
+float refresh = 50;
+
+float mouseX, mouseY;
 GLint objectCount;
 GLint numObjects;
+
+// Vector struct
+struct vector {
+	int x;
+	int y;
+} vector;
+
+// Triangle has three vectors/points
+struct triangle {
+	struct vector p1;
+	struct vector p2;
+	struct vector p3;
+	struct vector centre;
+} triangle;
+	
+// Struct for boid
 struct boid {
 	float v1[2];
 	float v2[2];
@@ -70,15 +47,19 @@ struct boid {
 	float color[3];
 	float rotate;
 
+	struct triangle t;
 	// Velocity
+
 	float velocity[2];
-	
+
 	// Vectors for applying rules
 	float r1[2];
 	float r2[2];
 	float r3[2];
+	float r4[2];
 
 } boids[MAXBOIDS];
+
 GLenum linePoly = GL_FALSE;
 
 static void
@@ -99,6 +80,13 @@ InitObjects(int num)
 	for (i = 0; i < num; i++) {
 		x = (rand() % 300) - 150;
 		y = (rand() % 300) - 150;
+
+		boids[i].t.p1.x = x;
+		boids[i].t.p2.x = x + 10;
+		boids[i].t.p3.x = x + 5;
+		boids[i].t.p1.y = y;
+		boids[i].t.p2.y = y;
+		boids[i].t.p2.y = y + 20;
 
 		boids[i].v1[0] = x;
 		boids[i].v2[0] = x + 10;
@@ -243,10 +231,29 @@ GrowTri(GLint h)
 }
 
 static void
+MoveMouse(int x, int y)
+{
+	// Convert it to the window coordinates
+	mouseX = (x / (float)windW) - 0.5f;
+	mouseY = (x / (float)windH) - 0.5f; 
+}
+
+static void
+AvoidPredator()
+{
+	printf("%f\n", mouseX);
+	int i;
+	for (i = 0; i < MAXBOIDS; i++) {
+		// Begin avoiding if the mouse only if the vectors are close
+		boids[i].r4[0] = -0.01 * ((mouseX - boids[i].v1[0]) / 100);
+		boids[i].r4[1] = -0.01 * ((mouseY - boids[i].v1[0]) / 100);
+	}
+}
+
+static void
 Mouse(int button, int state, int mouseX, int mouseY)
 {
 	GLint hit;
-
 	if (state == GLUT_DOWN) {
 		hit = DoSelect((GLint) mouseX, (GLint) mouseY);
 		if (hit != -1) {
@@ -270,7 +277,8 @@ Draw(void)
 	glPushMatrix();
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluOrtho2D(-175, 175, -175, 175);
+	//gluOrtho2D(-175, 175, -175, 175);
+	gluOrtho2D(-500, 500, -500, 500);
 	glMatrixMode(GL_MODELVIEW);
 	glClearColor(0.0, 0.0, 0.0, 0.0);
 	glClear(GL_COLOR_BUFFER_BIT);
@@ -283,11 +291,16 @@ Draw(void)
 	// R2
 	KeepDistance();
 
+	// R3
+	MatchVelocity();
+
+	// R4
+	AvoidPredator();
+
 	for (i = 0; i < MAXBOIDS; i++) {
 
-		printf("boids %d r2[x]: %f r2[y]:%f\n", i, boids[i].r2[0], boids[i].r2[1]);
-		boids[i].velocity[0] = boids[i].velocity[0] + boids[i].r1[0];
-		boids[i].velocity[1] = boids[i].velocity[1] + boids[i].r1[1];
+		boids[i].velocity[0] = boids[i].velocity[0] + boids[i].r1[0] + boids[i].r2[0] + boids[i].r3[0] + boids[i].r4[0];
+		boids[i].velocity[1] = boids[i].velocity[1] + boids[i].r1[1] + boids[i].r2[1] + boids[i].r3[0] + boids[i].r4[1];
 		boids[i].v1[0] = boids[i].v1[0] + boids[i].velocity[0];
 		boids[i].v1[1] = boids[i].v1[1] + boids[i].velocity[1];
 		boids[i].v2[0] = boids[i].v2[0] + boids[i].velocity[0];
@@ -471,6 +484,7 @@ MoveTowardsCentre(void)
 			// Skip the positional information of the boid we're looking at
 			if (i == j)
 				continue;
+
 			// In future we may want to set the 'position' of the boid as it's centre, but for now let's just pick one point
 			boids[i].r1[0] += boids[j].v1[0];
 			boids[i].r1[1] += boids[j].v1[1];
@@ -484,14 +498,6 @@ MoveTowardsCentre(void)
 		// 1% towards the centre = pcj = bj.position / 100 
 		boids[i].r1[0] = (boids[i].r1[0] - boids[i].v1[0]) / 100;
 		boids[i].r1[1] = (boids[i].r1[1] - boids[i].v1[1]) / 100;
-
-		// Update the positions
-		/*boids[i].v1[0] += pc[0];
-		boids[i].v1[1] += pc[1];
-		boids[i].v2[0] += pc[0];
-		boids[i].v2[1] += pc[1];
-		boids[i].v3[0] += pc[0];
-		boids[i].v3[1] += pc[1];*/
 	}
 }
 
@@ -500,6 +506,7 @@ static void
 KeepDistance(void)
 {
 	int i, j;
+	float distance, a, b, c_squared;
 	// Initialise our new vector to 0
 	for (i = 0; i < MAXBOIDS; i++) {
 		boids[i].r2[0] = 0;
@@ -507,13 +514,40 @@ KeepDistance(void)
 		for (j = 0; j < MAXBOIDS; j++) {
 			if (i == j)
 				continue;
-			// At some point change this to the centre point of the triangle
-			if ( (fabs(boids[j].v1[0] - boids[i].v1[0])) < 100 || (fabs(boids[j].v1[1] - boids[i].v1[1])) < 100 ) {
+			// Use pythagorus to determine distance between two boids
+			a = (boids[i].v1[0] - boids[j].v1[0]);
+			b = (boids[i].v1[1] - boids[j].v1[1]);
+			c_squared = (a * a) + (b * b);
+			distance = sqrt(c_squared);
+			// If the distance is less than 10 away from each other, apply rule
+			if (distance < 20) {
 				boids[i].r2[0] = boids[i].r2[0] - (boids[j].v1[0] - boids[i].v1[0]);
 				boids[i].r2[1] = boids[i].r2[1] - (boids[j].v1[1] - boids[i].v1[1]);
-				// If the x or y coordinates are less than 100 next to each other
- 			} 
-		}
+			}
+ 		} 
+	}
+}
+
+// Rule 3
+static void
+MatchVelocity(void)
+{
+	int i, j;
+	for (i = 0; i < MAXBOIDS; i++) {
+		for (j = 0; j < MAXBOIDS; j++) {
+			if (i == j)
+				continue;
+			boids[i].r3[0] = boids[i].r3[0] + boids[j].velocity[0];
+			boids[i].r3[1] = boids[i].r3[1] + boids[j].velocity[1];
+		}	
+		// Calcualte perceived velocity
+		boids[i].r3[0] = boids[i].r3[0] / (MAXBOIDS - 1);
+		boids[i].r3[1] = boids[i].r3[1] / (MAXBOIDS - 1);
+		
+		// Add a portion to the current velocity (lets say 1/8th)
+		boids[i].r3[0] = (boids[i].r3[0] - boids[i].velocity[0]) / 20;
+		boids[i].r3[1] = (boids[i].r3[1] - boids[i].velocity[1]) / 20;
+		
 	}
 }
 
@@ -539,6 +573,7 @@ main(int argc, char **argv)
 	glutKeyboardFunc(Key);
 	glutSpecialFunc(SpecialKey);
 	glutMouseFunc(Mouse);
+	glutPassiveMotionFunc(MoveMouse);
 	glutDisplayFunc(Draw);
 	glutTimerFunc(0, Timer, 0);
 	glutMainLoop();
