@@ -1,10 +1,10 @@
-
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
 #include <time.h>
 #include <GL/glut.h>
 #include "boids.h"
+#include <sys/queue.h>
 
 GLint windW = 1000, windH = 800;
 GLuint selectBuf[MAXSELECT];
@@ -24,6 +24,11 @@ int XMax = 300;
 int XMin = -300;
 int YMax = 300;
 int YMin = -300;
+
+int preyCount = 0;
+struct prey **preys = NULL;
+
+float colours[3][3];
 
 // Global mouse position
 struct vector MousePos[0];
@@ -49,6 +54,36 @@ void GetOGLPos(int x, int y, struct vector *MousePos)
     MousePos->y = -posX;
 }
 
+void AddPrey(int x, int y)
+{
+	int i;
+	// Add to the prey and reallocate
+	preyCount++;
+
+	// Reallocate our prey array according to the prey
+	preys = realloc(preys, preyCount * sizeof(struct prey *));
+
+	// Allocate a new prey
+	preys[preyCount - 1] = malloc(sizeof(struct prey));
+	
+	// Put the centre on mouse click
+	preys[preyCount - 1]->centre.x = x;
+	preys[preyCount - 1]->centre.y = y;
+
+	// Give it a pretty random colour
+	preys[preyCount - 1]->color[0] = ((rand() % 100) + 50) / 150.0;
+	preys[preyCount - 1]->color[1] = ((rand() % 100) + 50) / 150.0;
+	preys[preyCount - 1]->color[2] = ((rand() % 100) + 50) / 150.0;
+	
+	// Set this to 10 for now
+	preys[preyCount - 1]->radius = 5;
+
+	printf("We have: %d preys\n", preyCount);
+	for (i = 0; i < preyCount; i++) {
+		printf("centre[%d]: %f,%f\n", i, preys[i]->centre.x, preys[i]->centre.y);
+	}
+}
+
 // Adds two vectors
 struct vector
 AddVectors(struct vector v1, struct vector v2)
@@ -68,10 +103,10 @@ square(float a)
 }
 
 int
-check_within_radius(struct vector *centre, struct vector *v)
+check_within_radius(struct vector *centre, struct vector *v, float radius)
 {
 	// c^2 = a^2 + b^2
-	if ( (square(v->x - centre->x) + square(v->y - centre->y)) < square(LOCAL_RADIUS) )
+	if ( (square(v->x - centre->x) + square(v->y - centre->y)) < square(radius) )
 		return 1;
 	else
 		return 0;
@@ -90,6 +125,14 @@ InitObjects(int num)
 {
 	GLint i;
 	float x, y;
+	int cIndex;
+
+	// Create some random colours
+	for (i = 0; i < MAX_FISH_TYPES; i++) {
+		colours[i][0] = ((rand() % 100) + 50) / 150.0;
+		colours[i][1] = ((rand() % 100) + 50) / 150.0;
+		colours[i][2] = ((rand() % 100) + 50) / 150.0;
+	}
 
 	if (num > MAXBOIDS) {
 		num = MAXBOIDS;
@@ -101,21 +144,21 @@ InitObjects(int num)
 
 	srand((unsigned int) time(NULL));
 	for (i = 0; i < num; i++) {
+		cIndex = (rand() % 3);
 		x = (rand() % 300) - 150;
 		y = (rand() % 300) - 150;
 
 		// Set the triangle variables for each boid
 		boids[i].t.p1.x = x;
-		printf("Setting boids[i].t.p1.x to: %f\n", boids[i].t.p1.x);
 		boids[i].t.p2.x = x + 5;
 		boids[i].t.p3.x = x + 2.5;
 		boids[i].t.p1.y = y;
 		boids[i].t.p2.y = y;
 		boids[i].t.p3.y = y + 10;
 
-		boids[i].color[0] = ((rand() % 100) + 50) / 150.0;
-		boids[i].color[1] = ((rand() % 100) + 50) / 150.0;
-		boids[i].color[2] = ((rand() % 100) + 50) / 150.0;
+		boids[i].color[0] = colours[cIndex][0]; 
+		boids[i].color[1] = colours[cIndex][1];
+		boids[i].color[2] = colours[cIndex][2];
 
 		boids[i].velocity.x = 0;
 		boids[i].velocity.y = 0;
@@ -123,7 +166,6 @@ InitObjects(int num)
 		// Initialise rotation angle to 0
 		boids[i].rotate = 0.0f;
 	}
-	printf("memaddress: %d\n", &boids[0]);
 }
 
 static void
@@ -153,7 +195,12 @@ static void
 Render(GLenum mode)
 {
 	GLint i;
+	// Circle variables
+	int x, y;
 
+	float angle;
+
+	// Draw all the boids
 	for (i = 0; i < numObjects; i++) {
 		if (mode == GL_SELECT) {
 			glLoadName(i);
@@ -184,6 +231,19 @@ Render(GLenum mode)
 
 		// Make the fish rotate
 //		boids[i].rotate += 1.0f;
+	}
+
+	// Draw any prey
+	for (i = 0; i < preyCount; i++) {
+		glColor3fv(preys[i]->color);
+		glBegin(GL_TRIANGLE_FAN);
+		glVertex2f(preys[i]->centre.x, preys[i]->centre.y);
+		for (angle=1.0f;angle<361.0f;angle+=0.2) {
+    			x = preys[i]->centre.x + sin(angle) * preys[i]->radius;
+    			y = preys[i]->centre.y + cos(angle) * preys[i]->radius;
+    			glVertex2f(x,y);
+		}
+		glEnd();
 	}
 }
 
@@ -275,15 +335,102 @@ MoveMouse(int x, int y)
 float
 AvoidPredator(struct boid *b)
 {
+
 	// Scatter the flock if its within the same radius of the mouse
-	if (check_within_radius(&b->t.p1, &MousePos[0])) { 
-		printf("SCATTER!!!\n");
-		printf("Mouse Position x:%f, y:%f\n", MousePos[0].x, MousePos[0].y);
-		printf("My position: x:%f, y:%f\n", &b->t.p2.x, &b->t.p2.y);
-		return -2.0;
+	if (check_within_radius(&b->t.p1, &MousePos[0], MAX_RADIUS)) { 
+		return -10;
 	} else {
-		return 1.0;
+		return 1;
 	}
+}
+
+struct vector *
+MoveTowardsGoal(struct boid *b)
+{
+	int i;
+	struct vector *v = malloc(sizeof(struct vector));
+
+	// For determining the closest prey
+	struct vector t;
+	int preyIndex;
+
+	float diff_magnitude;
+	float magnitude;
+	
+	// Furthest possible distance
+	v->x = 0;
+	v->y = 0;
+
+	// If there are no prey, there's no need to go towards it
+	if (preyCount == 0)
+		return v;
+
+	v->x = preys[0]->centre.x;
+	v->y = preys[0]->centre.y;
+	
+	// Get the magnitude from our first prey
+	VectorMinus(&t, &b->t.p1, v);
+	magnitude = GetMagnitude(&t);
+
+	printf("First magnitude: %f\n", magnitude);
+		
+	// For every prey that exists
+	for (i = 1; i < preyCount; i++) {
+		VectorMinus(&t, &b->t.p1, &preys[i]->centre);
+		diff_magnitude = GetMagnitude(&t);
+		if (diff_magnitude < magnitude) {
+			v->x = t.x;
+			v->y = t.y;
+			magnitude = diff_magnitude;
+			preyIndex = i;
+		}
+		
+	}
+
+	// If we are touching the prey, make it disappear
+
+	if (magnitude < 10) {
+		printf("WE ARE CLOSE!!!\n");
+		printf("Magnitude is: %f\n", magnitude);
+		preyCount--;	
+		preys[preyIndex] = NULL;
+	}
+	
+	// Closest prey is now in v
+	VectorMinus(v, v, &b->t.p1);
+	VectorDivide(v, v, 100.0);	
+	return v;
+	
+}
+
+struct vector *
+KeepDistance(struct boid *b)
+{
+	struct vector *v = malloc(sizeof(struct vector));
+	// Temporary for doing calculations
+	struct vector *t = malloc(sizeof(struct vector));
+	
+	// Set up initial values
+	v->x = 0;
+	v->y = 0;
+
+	int i, j;
+	int boids_count;
+	
+	for (i = 0; i < MAXBOIDS; i++) {
+		if (b == &boids[i])
+			continue;
+
+		if (check_within_radius(&b->t.p1, &boids[i].t.p1, 15)) {
+			VectorMinus(t, &boids[i].t.p1, &b->t.p1);
+			VectorMinus(v, v, t);
+		}
+	}	
+
+	free(t);
+	return(v);
+	
+
 }
 
 static void
@@ -291,9 +438,14 @@ Mouse(int button, int state, int mouseX, int mouseY)
 {
 	GLint hit;
 	float x, y;
+	
+	struct vector clickPos;
+
 	if (state == GLUT_DOWN) {
-		//GetOGLPos(mouseX, mouseY, &MousePos[0]);
+		GetOGLPos(mouseX, mouseY, &clickPos);
+		AddPrey(clickPos.x, clickPos.y);
 		//printf("Mouse position: x:%f,y:%f\n", MousePos[0].x, MousePos[0].y);
+		
 		hit = DoSelect((GLint) mouseX, (GLint) mouseY);
 		if (hit != -1) {
 			if (button == GLUT_LEFT_BUTTON) {
@@ -322,8 +474,9 @@ Draw(void)
 	struct vector *r1;
 	struct vector *r2;
 	struct vector *r3;
+	struct vector *r4;
 
-	float m1 = 0; // multiplier
+	float m1 = 1; // multiplier
 
 	glPushMatrix();
 	glMatrixMode(GL_PROJECTION);
@@ -338,16 +491,17 @@ Draw(void)
 
 	// R1	
 
-	printf("Boid 1 Position: x:%f, y:%f\n", boids[0].t.p1.x, boids[0].t.p1.y);
 	for (i = 0; i < MAXBOIDS; i++) {
 		
 		m1 = AvoidPredator(&boids[i]);
 		// Apply Rules
 		r0 = StayInBounds(&boids[i]);
 		r1 = MoveTowardsCentre(&boids[i]);
+		// Add a negative multiplying factor if a mouse is near the swarm
 		VectorMultiply(r1, r1, m1);
 		r2 = MatchVelocity(&boids[i]);
-		r3 = LimitSpeed(&boids[i]);
+		r3 = KeepDistance(&boids[i]);
+		r4 = MoveTowardsGoal(&boids[i]);
 
 		// Add R0 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r0);
@@ -355,7 +509,17 @@ Draw(void)
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r1);
 		// Add R2 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r2);
-		
+		// Add R3 to velocity
+		VectorAdd(&boids[i].velocity, &boids[i].velocity, r3);
+		// Add R4 to velocity
+		VectorAdd(&boids[i].velocity, &boids[i].velocity, r4);
+			
+
+
+	
+		// Limit the speed according to the maximum speed	
+
+		LimitSpeed(&boids[i]);
 		if (boids[i].velocity.y > 1000) {
 			exit(1);
 		}
@@ -367,6 +531,8 @@ Draw(void)
 
 		free(r0);
 		free(r1);
+		free(r2);
+		free(r3);
 	}
 
 
@@ -586,15 +752,25 @@ StayInBounds(struct boid *b)
 	return v;
 }
 
-struct vector *
+void
 LimitSpeed(struct boid *b)
 {
-	struct vector *v = malloc(sizeof(struct vector));
-
-	if (GetMagnitude(v) > MAX_SPEED) {
-		VectorDivide(&b->velocity, &b->velocity, GetMagnitude(v));
+	if (GetMagnitude(&b->velocity) > MAX_SPEED) {
+		VectorDivide(&b->velocity, &b->velocity, GetMagnitude(&b->velocity));
 		b->velocity.x = b->velocity.x * (float)MAX_SPEED;
 		b->velocity.y = b->velocity.y * (float)MAX_SPEED;
+	}
+}
+
+int
+CheckSameFlock(struct boid *a, struct boid *b)
+{
+	if ( (a->color[0] == b->color[0])
+		&& (a->color[1] == b->color[1])
+		&& (a->color[2] == b->color[2]) ) {
+		return 1;
+	} else {
+		return 0;
 	}
 }
 
@@ -615,13 +791,12 @@ MoveTowardsCentre(struct boid *b)
 		// If it is, skip it
 		if (b == &boids[i])
 			continue;
-		
-//		if (check_within_radius(&b->t.p1, &boids[i].t.p1)) { 
-			//printf("It is within the correct radius\n");
-			VectorAdd(v, v, &boids[i].t.p1);
-			boids_count++;
-//		}
-		
+			
+			//if (check_within_radius(&b->t.p1, &boids[i].t.p1, MAX_RADIUS)) { 
+				//printf("It is within the correct radius\n");
+				VectorAdd(v, v, &boids[i].t.p1);
+				boids_count++;
+			//}
 	}
 	
 	// Nothing in the local radius
@@ -639,7 +814,7 @@ MoveTowardsCentre(struct boid *b)
 }
 
 // Rule 2
-static void
+/*static void
 KeepDistance(void)
 {
 	int i, j;
@@ -663,7 +838,7 @@ KeepDistance(void)
 			}
  		} 
 	}
-}
+}*/
 
 // Rule 3
 struct vector *
@@ -680,10 +855,10 @@ MatchVelocity(struct boid *b)
 		if (b == &boids[i])
 			continue;
 
-		if (check_within_radius(&b->t.p1, &boids[i].t.p1)) {
-			VectorAdd(v, v, &boids[i].velocity);
-			boids_count++;
-		}
+			//if (check_within_radius(&b->t.p1, &boids[i].t.p1, MAX_RADIUS)) {
+				VectorAdd(v, v, &boids[i].velocity);
+				boids_count++;
+		//	}
 	}	
 
 	if (!boids_count)
