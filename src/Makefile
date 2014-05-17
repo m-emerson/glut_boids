@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-framework OpenGL -framework GLUT
+CFLAGS=-framework OpenGL -framework GLUT -Wall
 objects = boids.o
 
 default: boids
