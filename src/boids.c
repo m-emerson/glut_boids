@@ -14,7 +14,6 @@ float zRotation = 90.0;
 float zoom = 1.0;
 float refresh = 50;
 
-float mouseX, mouseY;
 GLint objectCount;
 GLint numObjects;
 
@@ -25,6 +24,30 @@ int XMax = 300;
 int XMin = -300;
 int YMax = 300;
 int YMin = -300;
+
+// Global mouse position
+struct vector MousePos[0];
+
+void GetOGLPos(int x, int y, struct vector *MousePos)
+{
+    GLint viewport[4];
+    GLdouble modelview[16];
+    GLdouble projection[16];
+    GLfloat winX, winY, winZ;
+    GLdouble posX, posY, posZ;
+ 
+    glGetDoublev( GL_MODELVIEW_MATRIX, modelview );
+    glGetDoublev( GL_PROJECTION_MATRIX, projection );
+    glGetIntegerv( GL_VIEWPORT, viewport );
+ 
+    winX = (float)x;
+    winY = (float)viewport[3] - (float)y;
+    glReadPixels( x, (int)winY, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT, &winZ );
+ 
+    gluUnProject( winX, winY, winZ, modelview, projection, viewport, &posX, &posY, &posZ);
+    MousePos->x = posY;
+    MousePos->y = -posX;
+}
 
 // Adds two vectors
 struct vector
@@ -82,7 +105,6 @@ InitObjects(int num)
 		y = (rand() % 300) - 150;
 
 		// Set the triangle variables for each boid
-
 		boids[i].t.p1.x = x;
 		printf("Setting boids[i].t.p1.x to: %f\n", boids[i].t.p1.x);
 		boids[i].t.p2.x = x + 5;
@@ -107,7 +129,7 @@ InitObjects(int num)
 static void
 Init(void)
 {
-	numObjects = 100;
+	numObjects = MAXBOIDS;
 	InitObjects(numObjects);
 }
 
@@ -143,6 +165,22 @@ Render(GLenum mode)
 		glVertex2f(boids[i].t.p2.x, boids[i].t.p2.y);
 		glVertex2f(boids[i].t.p3.x, boids[i].t.p3.y);
 		glEnd();
+
+		// Draw the slider
+		/*glColor3d(1, 1, 1); 
+		glBegin(GL_POLYGON);
+    			glVertex2d(425, -425);
+    			glVertex2d(425, -375);
+    			glVertex2d(450, -450);
+    			glVertex2d(450, -375);
+		glEnd();
+
+		glLineWidth(2.5);
+		glColor3f(1.0, 1.0, 1.0);
+		glBegin(GL_LINES);
+			glVertex2f(400, -400);
+			glVertex2f(400, -475);
+		glEnd();*/
 
 		// Make the fish rotate
 //		boids[i].rotate += 1.0f;
@@ -231,19 +269,20 @@ GrowTri(GLint h)
 static void
 MoveMouse(int x, int y)
 {
-	// Convert it to the window coordinates
-	mouseX = (x / (float)windW) - 0.5f;
-	mouseY = (x / (float)windH) - 0.5f; 
+		GetOGLPos(x, y, &MousePos[0]);
 }
 
-static void
-AvoidPredator()
+float
+AvoidPredator(struct boid *b)
 {
-	int i;
-	for (i = 0; i < MAXBOIDS; i++) {
-		// Begin avoiding if the mouse only if the vectors are close
-		boids[i].r4[0] = -0.01 * ((mouseX - boids[i].v1[0]) / 100);
-		boids[i].r4[1] = -0.01 * ((mouseY - boids[i].v1[0]) / 100);
+	// Scatter the flock if its within the same radius of the mouse
+	if (check_within_radius(&b->t.p1, &MousePos[0])) { 
+		printf("SCATTER!!!\n");
+		printf("Mouse Position x:%f, y:%f\n", MousePos[0].x, MousePos[0].y);
+		printf("My position: x:%f, y:%f\n", &b->t.p2.x, &b->t.p2.y);
+		return -2.0;
+	} else {
+		return 1.0;
 	}
 }
 
@@ -251,7 +290,10 @@ static void
 Mouse(int button, int state, int mouseX, int mouseY)
 {
 	GLint hit;
+	float x, y;
 	if (state == GLUT_DOWN) {
+		//GetOGLPos(mouseX, mouseY, &MousePos[0]);
+		//printf("Mouse position: x:%f,y:%f\n", MousePos[0].x, MousePos[0].y);
 		hit = DoSelect((GLint) mouseX, (GLint) mouseY);
 		if (hit != -1) {
 			if (button == GLUT_LEFT_BUTTON) {
@@ -269,20 +311,6 @@ Mouse(int button, int state, int mouseX, int mouseY)
 static void
 DrawSlider(void)
 {
-	glClear(GL_COLOR_BUFFER_BIT);  
-	/*glColor3f(0.0,0.4,0.2); 
-	glPointSize(3.0);  
-
-	glBegin(GL_LINES);
-		glVertex2i(0.1f,0.1f);
-		glVertex2i(0.75f,-0.75f);
-	glEnd();*/
-
-
-       glColor3f(0.0f, 0.0f, 0.0f);
-       glRectf(-0.75f,0.75f, 0.75f, -0.75f);
-       glutSwapBuffers();
-
 }
 
 static void
@@ -294,6 +322,8 @@ Draw(void)
 	struct vector *r1;
 	struct vector *r2;
 	struct vector *r3;
+
+	float m1 = 0; // multiplier
 
 	glPushMatrix();
 	glMatrixMode(GL_PROJECTION);
@@ -308,11 +338,14 @@ Draw(void)
 
 	// R1	
 
+	printf("Boid 1 Position: x:%f, y:%f\n", boids[0].t.p1.x, boids[0].t.p1.y);
 	for (i = 0; i < MAXBOIDS; i++) {
 		
+		m1 = AvoidPredator(&boids[i]);
 		// Apply Rules
 		r0 = StayInBounds(&boids[i]);
 		r1 = MoveTowardsCentre(&boids[i]);
+		VectorMultiply(r1, r1, m1);
 		r2 = MatchVelocity(&boids[i]);
 		r3 = LimitSpeed(&boids[i]);
 
@@ -336,7 +369,8 @@ Draw(void)
 		free(r1);
 	}
 
-	DrawSlider();
+
+	
 	Render(GL_RENDER);
 	glPopMatrix();
 	glutSwapBuffers();
@@ -520,6 +554,14 @@ VectorDivide(struct vector *ret, struct vector *a, float scalar)
 	ret->y = a->y / scalar;
 }
 
+void
+VectorMultiply(struct vector *ret, struct vector *a, float scalar)
+{
+	ret->x = a->x * scalar;
+	ret->y = a->y * scalar;
+
+}
+
 struct vector *
 StayInBounds(struct boid *b)
 {
@@ -574,11 +616,11 @@ MoveTowardsCentre(struct boid *b)
 		if (b == &boids[i])
 			continue;
 		
-		if (check_within_radius(&b->t.p1, &boids[i].t.p1)) { 
+//		if (check_within_radius(&b->t.p1, &boids[i].t.p1)) { 
 			//printf("It is within the correct radius\n");
 			VectorAdd(v, v, &boids[i].t.p1);
 			boids_count++;
-		}
+//		}
 		
 	}
 	
@@ -587,13 +629,11 @@ MoveTowardsCentre(struct boid *b)
 		return v;
 
 	// Calculate vector offset
-	printf("Boids count: %d\n", boids_count);
 	VectorDivide(v, v, (float)(boids_count));
 	//VectorDivide(v, v, (float)(MAXBOIDS - 1));
 	// 1% towards the centre = pcj = bj.position / 100
 	VectorMinus(v, v, &boids[i].t.p1);	
 	VectorDivide(v, v, 100);
-	printf("The calculation yielded: x:%f, y:%f\n", v->x, v->y);
 	
 	return v; 
 }
