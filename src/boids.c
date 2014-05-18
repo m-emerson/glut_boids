@@ -25,12 +25,13 @@ int XMin = -300;
 int YMax = 300;
 int YMin = -300;
 
+// Global counter for amount of prey on screen
 int preyCount = 0;
+
 // Create linked list for prey
 LIST_HEAD(preysHead, prey) preysHead;
 
-struct prey **preys = NULL;
-
+// List to contain colours that boids can be
 float colours[3][3];
 
 // Global mouse position
@@ -57,7 +58,17 @@ void GetOGLPos(int x, int y, struct vector *MousePos)
     MousePos->y = -posX;
 }
 
-void AddPrey(int x, int y)
+void
+DetermineTailPos(struct boid *b)
+{
+	// Copy the centre value over for the tail end
+	memcpy(&b->tailEnd, &b->centre, sizeof(struct vector));
+	// New beginning of tail is at the centre
+	VectorAdd(&b->tailHead, &b->centre, &b->velocity);
+}
+
+void
+AddPrey(int x, int y)
 {
 	preyCount++;
 	// Allocate a new prey
@@ -67,17 +78,16 @@ void AddPrey(int x, int y)
 	p->centre.x = x;
 	p->centre.y = y;
 
-	// Give it a pretty random colour
-	p->color[0] = ((rand() % 100) + 50) / 150.0;
-	p->color[1] = ((rand() % 100) + 50) / 150.0;
-	p->color[2] = ((rand() % 100) + 50) / 150.0;
-	
-	// Set this to 10 for now
-	p->radius = 5;
-	
-	LIST_INSERT_HEAD(&preysHead, p, pointers);
+	// Make the prey white
+	p->color[0] = 1.0;
+	p->color[1] = 1.0;
+	p->color[2] = 1.0;
 
-	printf("INSERTED!!\n");
+	// Set this to 5 for now	
+	p->radius = 10;
+	
+	// Insert new prey into linked list	
+	LIST_INSERT_HEAD(&preysHead, p, pointers);
 }
 
 // Adds two vectors
@@ -141,16 +151,23 @@ InitObjects(int num)
 	srand((unsigned int) time(NULL));
 	for (i = 0; i < num; i++) {
 		cIndex = (rand() % 3);
+
+		// Determine initial centre for boid
 		x = (rand() % 300) - 150;
 		y = (rand() % 300) - 150;
+	
+		boids[i].centre.x = x;
+		boids[i].centre.y = y;	
 
+		boids[i].radius = 5;
+	
 		// Set the triangle variables for each boid
-		boids[i].t.p1.x = x;
+		/*boids[i].t.p1.x = x;
 		boids[i].t.p2.x = x + 5;
 		boids[i].t.p3.x = x + 2.5;
 		boids[i].t.p1.y = y;
 		boids[i].t.p2.y = y;
-		boids[i].t.p3.y = y + 10;
+		boids[i].t.p3.y = y + 10;*/
 
 		boids[i].color[0] = colours[cIndex][0]; 
 		boids[i].color[1] = colours[cIndex][1];
@@ -206,10 +223,21 @@ Render(GLenum mode)
 		}
 		//glRotatef(boids[i].rotate, 0.0f, 0.0f, 0.5f);
 		glColor3fv(boids[i].color);
-		glBegin(GL_POLYGON);
-		glVertex2f(boids[i].t.p1.x, boids[i].t.p1.y);
-		glVertex2f(boids[i].t.p2.x, boids[i].t.p2.y);
-		glVertex2f(boids[i].t.p3.x, boids[i].t.p3.y);
+		glBegin(GL_TRIANGLE_FAN);
+		glVertex2f(boids[i].centre.x, boids[i].centre.y);
+		for (angle=1.0f;angle<361.0f;angle+=0.2) {
+    			x = boids[i].centre.x + sin(angle) * boids[i].radius;
+    			y = boids[i].centre.y + cos(angle) * boids[i].radius;
+    			glVertex2f(x,y);
+		}
+		glEnd();
+
+		// Draw the tail
+		glLineWidth(2.5);
+		glColor3fv(boids[i].color);
+		glBegin(GL_LINES);
+			glVertex2f(boids[i].tailHead.x, boids[i].tailHead.y);
+			glVertex2f(boids[i].tailEnd.x, boids[i].tailEnd.y);
 		glEnd();
 
 		// Draw the slider
@@ -234,7 +262,6 @@ Render(GLenum mode)
 
 	struct prey *np;
 	// Draw any prey
-
 	LIST_FOREACH(np, &preysHead, pointers) {
 		glColor3fv(np->color);
 		glBegin(GL_TRIANGLE_FAN);
@@ -339,7 +366,7 @@ AvoidPredator(struct boid *b)
 {
 
 	// Scatter the flock if its within the same radius of the mouse
-	if (check_within_radius(&b->t.p1, &MousePos[0], MAX_RADIUS)) { 
+	if (check_within_radius(&b->centre, &MousePos[0], MAX_RADIUS)) { 
 		return -10;
 	} else {
 		return 1;
@@ -378,14 +405,14 @@ MoveTowardsGoal(struct boid *b)
 		if (init) {
 			// Get the first magnitude so we have something
 			// to compare to
-			VectorMinus(&t, &b->t.p1, &np->centre);
+			VectorMinus(&t, &b->centre, &np->centre);
 			magnitude = GetMagnitude(&t);
 			init = 0;
 			removePrey = np;
 			continue;
 		}
 
-		VectorMinus(&t, &b->t.p1, &np->centre);
+		VectorMinus(&t, &b->centre, &np->centre);
 		diff_magnitude = GetMagnitude(&t);
 		if (diff_magnitude < magnitude) {
 			v->x = t.x;
@@ -412,7 +439,7 @@ MoveTowardsGoal(struct boid *b)
 	}
 	
 	// Closest prey is now in v
-	VectorMinus(v, v, &b->t.p1);
+	VectorMinus(v, v, &b->centre);
 	VectorDivide(v, v, 80.0);	
 	free(np);
 	return v;
@@ -437,8 +464,8 @@ KeepDistance(struct boid *b)
 		if (b == &boids[i])
 			continue;
 
-		if (check_within_radius(&b->t.p1, &boids[i].t.p1, 15)) {
-			VectorMinus(t, &boids[i].t.p1, &b->t.p1);
+		if (check_within_radius(&b->centre, &boids[i].centre, 15)) {
+			VectorMinus(t, &boids[i].centre, &b->centre);
 			VectorMinus(v, v, t);
 		}
 	}	
@@ -519,6 +546,9 @@ Draw(void)
 		r3 = KeepDistance(&boids[i]);
 		r4 = MoveTowardsGoal(&boids[i]);
 
+		// Determine the tail position after this movement
+		DetermineTailPos(&boids[i]);	
+
 		// Add R0 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r0);
 		// Add R1 to velocity
@@ -541,7 +571,7 @@ Draw(void)
 		}
 	
 		// Apply velocity to position	
-		VectorAdd(&boids[i].t.p1, &boids[i].t.p1, &boids[i].velocity);
+		VectorAdd(&boids[i].centre, &boids[i].centre, &boids[i].velocity);
 		VectorAdd(&boids[i].t.p2, &boids[i].t.p2, &boids[i].velocity);
 		VectorAdd(&boids[i].t.p3, &boids[i].t.p3, &boids[i].velocity);
 
@@ -755,14 +785,14 @@ StayInBounds(struct boid *b)
 
 	//printf("t.p1.x: %f\n", b->t.p1.x);	
 	
-	if (b->t.p1.x < (float)XMin)
+	if (b->centre.x < (float)XMin)
 		v->x = 10;
-	else if (b->t.p1.x > (float)XMax)
+	else if (b->centre.x > (float)XMax)
 		v->x = -10;
 	
-	if (b->t.p1.y < (float)YMin)
+	if (b->centre.y < (float)YMin)
 		v->y = 10;
-	else if (b->t.p1.y > (float)YMax) 
+	else if (b->centre.y > (float)YMax) 
 		v->y = -10;
 
 	return v;
@@ -810,7 +840,7 @@ MoveTowardsCentre(struct boid *b)
 			
 			//if (check_within_radius(&b->t.p1, &boids[i].t.p1, MAX_RADIUS)) { 
 				//printf("It is within the correct radius\n");
-				VectorAdd(v, v, &boids[i].t.p1);
+				VectorAdd(v, v, &boids[i].centre);
 				boids_count++;
 			//}
 	}
@@ -823,7 +853,7 @@ MoveTowardsCentre(struct boid *b)
 	VectorDivide(v, v, (float)(boids_count));
 	//VectorDivide(v, v, (float)(MAXBOIDS - 1));
 	// 1% towards the centre = pcj = bj.position / 100
-	VectorMinus(v, v, &boids[i].t.p1);	
+	VectorMinus(v, v, &boids[i].centre);	
 	VectorDivide(v, v, 100);
 	
 	return v; 

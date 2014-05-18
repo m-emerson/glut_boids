@@ -47,6 +47,15 @@ struct boid {
 	float color[3];
 	float rotate;
 
+	// For circular boid body
+	struct vector centre;
+	float radius;
+
+	// Tail line
+	struct vector tailHead;
+	struct vector tailEnd;
+	float length;
+
 	float v1[2];
 	float v2[2];
 	float v3[2];
