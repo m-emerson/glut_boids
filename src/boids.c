@@ -26,6 +26,9 @@ int YMax = 300;
 int YMin = -300;
 
 int preyCount = 0;
+// Create linked list for prey
+LIST_HEAD(preysHead, prey) preysHead;
+
 struct prey **preys = NULL;
 
 float colours[3][3];
@@ -56,32 +59,25 @@ void GetOGLPos(int x, int y, struct vector *MousePos)
 
 void AddPrey(int x, int y)
 {
-	int i;
-	// Add to the prey and reallocate
 	preyCount++;
-
-	// Reallocate our prey array according to the prey
-	preys = realloc(preys, preyCount * sizeof(struct prey *));
-
 	// Allocate a new prey
-	preys[preyCount - 1] = malloc(sizeof(struct prey));
+	struct prey *p = malloc(sizeof(struct prey));
 	
 	// Put the centre on mouse click
-	preys[preyCount - 1]->centre.x = x;
-	preys[preyCount - 1]->centre.y = y;
+	p->centre.x = x;
+	p->centre.y = y;
 
 	// Give it a pretty random colour
-	preys[preyCount - 1]->color[0] = ((rand() % 100) + 50) / 150.0;
-	preys[preyCount - 1]->color[1] = ((rand() % 100) + 50) / 150.0;
-	preys[preyCount - 1]->color[2] = ((rand() % 100) + 50) / 150.0;
+	p->color[0] = ((rand() % 100) + 50) / 150.0;
+	p->color[1] = ((rand() % 100) + 50) / 150.0;
+	p->color[2] = ((rand() % 100) + 50) / 150.0;
 	
 	// Set this to 10 for now
-	preys[preyCount - 1]->radius = 5;
+	p->radius = 5;
+	
+	LIST_INSERT_HEAD(&preysHead, p, pointers);
 
-	printf("We have: %d preys\n", preyCount);
-	for (i = 0; i < preyCount; i++) {
-		printf("centre[%d]: %f,%f\n", i, preys[i]->centre.x, preys[i]->centre.y);
-	}
+	printf("INSERTED!!\n");
 }
 
 // Adds two vectors
@@ -165,6 +161,9 @@ InitObjects(int num)
 
 		// Initialise rotation angle to 0
 		boids[i].rotate = 0.0f;
+
+		LIST_INIT(&preysHead);
+
 	}
 }
 
@@ -233,18 +232,21 @@ Render(GLenum mode)
 //		boids[i].rotate += 1.0f;
 	}
 
+	struct prey *np;
 	// Draw any prey
-	for (i = 0; i < preyCount; i++) {
-		glColor3fv(preys[i]->color);
+
+	LIST_FOREACH(np, &preysHead, pointers) {
+		glColor3fv(np->color);
 		glBegin(GL_TRIANGLE_FAN);
-		glVertex2f(preys[i]->centre.x, preys[i]->centre.y);
+		glVertex2f(np->centre.x, np->centre.y);
 		for (angle=1.0f;angle<361.0f;angle+=0.2) {
-    			x = preys[i]->centre.x + sin(angle) * preys[i]->radius;
-    			y = preys[i]->centre.y + cos(angle) * preys[i]->radius;
+    			x = np->centre.x + sin(angle) * np->radius;
+    			y = np->centre.y + cos(angle) * np->radius;
     			glVertex2f(x,y);
 		}
 		glEnd();
-	}
+	} 
+	free(np);
 }
 
 static GLint
@@ -365,24 +367,31 @@ MoveTowardsGoal(struct boid *b)
 	if (preyCount == 0)
 		return v;
 
-	v->x = preys[0]->centre.x;
-	v->y = preys[0]->centre.y;
-	
-	// Get the magnitude from our first prey
-	VectorMinus(&t, &b->t.p1, v);
-	magnitude = GetMagnitude(&t);
+	struct prey *np;
+	struct prey *removePrey;
+	// Draw any prey
 
-	printf("First magnitude: %f\n", magnitude);
-		
+	int init = 1;
+
+	LIST_FOREACH(np, &preysHead, pointers) {
 	// For every prey that exists
-	for (i = 1; i < preyCount; i++) {
-		VectorMinus(&t, &b->t.p1, &preys[i]->centre);
+		if (init) {
+			// Get the first magnitude so we have something
+			// to compare to
+			VectorMinus(&t, &b->t.p1, &np->centre);
+			magnitude = GetMagnitude(&t);
+			init = 0;
+			removePrey = np;
+			continue;
+		}
+
+		VectorMinus(&t, &b->t.p1, &np->centre);
 		diff_magnitude = GetMagnitude(&t);
 		if (diff_magnitude < magnitude) {
 			v->x = t.x;
 			v->y = t.y;
 			magnitude = diff_magnitude;
-			preyIndex = i;
+			removePrey = np;
 		}
 		
 	}
@@ -390,15 +399,22 @@ MoveTowardsGoal(struct boid *b)
 	// If we are touching the prey, make it disappear
 
 	if (magnitude < 10) {
-		printf("WE ARE CLOSE!!!\n");
-		printf("Magnitude is: %f\n", magnitude);
-		preyCount--;	
-		preys[preyIndex] = NULL;
+		printf("VERY CLOSE!!!\n");
+		// Find the prey to remove
+		preyCount--;
+		LIST_FOREACH(np, &preysHead, pointers) {
+			printf("removing now, i think\n");
+			if (removePrey  == np) {
+				printf("removing from the list\n");
+				LIST_REMOVE(np, pointers);
+			}
+		}
 	}
 	
 	// Closest prey is now in v
 	VectorMinus(v, v, &b->t.p1);
-	VectorDivide(v, v, 100.0);	
+	VectorDivide(v, v, 80.0);	
+	free(np);
 	return v;
 	
 }
