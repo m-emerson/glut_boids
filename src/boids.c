@@ -90,16 +90,6 @@ AddPrey(int x, int y)
 	LIST_INSERT_HEAD(&preysHead, p, pointers);
 }
 
-// Adds two vectors
-struct vector
-AddVectors(struct vector v1, struct vector v2)
-{
-	struct vector ret;
-	ret.x = v1.x + v2.x;
-	ret.y = v1.x + v2.y;
-	return ret;
-}
-
 float
 square(float a)
 {
@@ -150,7 +140,7 @@ InitObjects(int num)
 
 	srand((unsigned int) time(NULL));
 	for (i = 0; i < num; i++) {
-		cIndex = (rand() % 3);
+		cIndex = (rand() % MAX_FISH_TYPES);
 
 		// Determine initial centre for boid
 		x = (rand() % 300) - 150;
@@ -160,19 +150,13 @@ InitObjects(int num)
 		boids[i].centre.y = y;	
 
 		boids[i].radius = 5;
-	
-		// Set the triangle variables for each boid
-		/*boids[i].t.p1.x = x;
-		boids[i].t.p2.x = x + 5;
-		boids[i].t.p3.x = x + 2.5;
-		boids[i].t.p1.y = y;
-		boids[i].t.p2.y = y;
-		boids[i].t.p3.y = y + 10;*/
 
+		// Pick one of three possible colours for boids	
 		boids[i].color[0] = colours[cIndex][0]; 
 		boids[i].color[1] = colours[cIndex][1];
 		boids[i].color[2] = colours[cIndex][2];
 
+		// Initial velocity is 0
 		boids[i].velocity.x = 0;
 		boids[i].velocity.y = 0;
 
@@ -424,15 +408,11 @@ MoveTowardsGoal(struct boid *b)
 	}
 
 	// If we are touching the prey, make it disappear
-
 	if (magnitude < 10) {
-		printf("VERY CLOSE!!!\n");
-		// Find the prey to remove
+		// Find the prey to remove and remove it
 		preyCount--;
 		LIST_FOREACH(np, &preysHead, pointers) {
-			printf("removing now, i think\n");
 			if (removePrey  == np) {
-				printf("removing from the list\n");
 				LIST_REMOVE(np, pointers);
 			}
 		}
@@ -546,8 +526,6 @@ Draw(void)
 		r3 = KeepDistance(&boids[i]);
 		r4 = MoveTowardsGoal(&boids[i]);
 
-		// Determine the tail position after this movement
-		DetermineTailPos(&boids[i]);	
 
 		// Add R0 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r0);
@@ -569,6 +547,9 @@ Draw(void)
 		if (boids[i].velocity.y > 1000) {
 			exit(1);
 		}
+
+		// Determine the tail position after this movement
+		DetermineTailPos(&boids[i]);	
 	
 		// Apply velocity to position	
 		VectorAdd(&boids[i].centre, &boids[i].centre, &boids[i].velocity);
