@@ -537,12 +537,8 @@ Draw(void)
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r3);
 		// Add R4 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r4);
-			
-
-
 	
 		// Limit the speed according to the maximum speed	
-
 		LimitSpeed(&boids[i]);
 		if (boids[i].velocity.y > 1000) {
 			exit(1);
@@ -834,7 +830,7 @@ MoveTowardsCentre(struct boid *b)
 	VectorDivide(v, v, (float)(boids_count));
 	//VectorDivide(v, v, (float)(MAXBOIDS - 1));
 	// 1% towards the centre = pcj = bj.position / 100
-	VectorMinus(v, v, &boids[i].centre);	
+	VectorMinus(v, v, &b->centre);	
 	VectorDivide(v, v, 100);
 	
 	return v; 
