@@ -14,6 +14,7 @@
  *
  */
 
+#include <sys/queue.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <GL/glut.h>	   // The GL Utility Toolkit (GLUT) Header
@@ -23,7 +24,7 @@
 #define MAX_BOIDS 50
 #define BOUNDS 10 
 #define MAX_SPEED 0.5
-
+#define TAIL_LENGTH 10
 typedef struct {
     int width;
 	int height;
@@ -34,9 +35,11 @@ typedef struct {
 	float z_far;
 } glutWindow;
 glutWindow win;
+
 float Rotation;
 float Translation = 0.01;
 float refresh = 50;
+int tailCount = 0;
 
 struct vector {
 	float x;
@@ -44,11 +47,17 @@ struct vector {
 	float z;
 } vector;
 
+struct tails {
+	struct vector position;
+	LIST_ENTRY(tails) pointers;
+} tails;
+
 struct boid {
 	struct vector position;
 	struct vector velocity;
 	float color[3];
-	struct vector **traces;
+	LIST_HEAD(tailsHead, tails) tailsHead;
+	struct vector tailPositions[10];
 } boids[MAX_BOIDS];
 
 // Multiplyer should be 1.0 or -1.0, so we can use this function for VectorMinus too
@@ -123,6 +132,25 @@ RandomCoordinate()
 
 }
 
+void
+DetermineNewTracePos(struct boid *b)
+{
+	int i = 0;
+	struct tails *np;
+	struct tails *t = malloc(sizeof(struct tails));
+	memcpy(&t->position, &b->position, sizeof(struct vector));
+	if (tailCount == TAIL_LENGTH) {
+		LIST_FOREACH(np, &b->tailsHead, pointers) {
+			if (i == tailCount - 1)
+				LIST_REMOVE(np, pointers);
+			i++;
+		}
+	}
+	LIST_INSERT_HEAD(&b->tailsHead, t, pointers);
+	//memcpy(&b->tailEnd, &b->position, sizeof(struct vector));
+	//VectorAdd(&b->tailHead, &b->position, &b->velocity, 1.0);*/
+}
+
 // Initialisation function, set up boid coordinates
 void Init()
 {
@@ -140,6 +168,8 @@ void Init()
 		boids[i].color[0] = ((rand() % 100) + 50) / 150.0;
 		boids[i].color[1] = ((rand() % 100) + 50) / 150.0;
 		boids[i].color[2] = ((rand() % 100) + 50) / 150.0;
+		
+		LIST_INIT(&boids[i].tailsHead);
 	}
 
 }
@@ -165,7 +195,6 @@ KeepDistance(struct boid *b)
 			VectorAdd(t, &boids[i].position, &b->position, -1.0);
 			VectorAdd(v, v, t, -1.0);
 			VectorDivide(v, v, 8);
-			
 		}
 	}
 
@@ -202,7 +231,8 @@ StayWithinBounds(struct boid *b)
 
 }
 
-void LimitSpeed(struct boid *b)
+void
+LimitSpeed(struct boid *b)
 {
 	if (GetMagnitude(&b->velocity) > MAX_SPEED) {
 		VectorDivide(&b->velocity, &b->velocity, GetMagnitude(&b->velocity));
@@ -266,28 +296,47 @@ MatchVelocity(struct boid *b)
 		
 }
 
-void draw_boids()
+void
+draw_boids()
 {	
 	int i;
+	int count = 0;
+	struct tails *np;
+	struct tails *last;
 	for (i = 0; i < MAX_BOIDS; i++) {
+    		glEnable(GL_LIGHTING);
+    		glEnable(GL_LIGHT0); 
 		glPushMatrix();
 			glTranslatef(boids[i].position.x, boids[i].position.y, boids[i].position.z);
 			glColor3fv(boids[i].color);
 			glutSolidSphere(0.2, 20, 20);
 		glPopMatrix();
+
+
+		// Disable the lighting for the tails	
+		glDisable(GL_LIGHTING);
+		glDisable(GL_LIGHT0);
+
+		glPushMatrix();
+			glColor3fv(boids[i].color);
+			glLineWidth(1.0);
+			glBegin(GL_LINES);
+				LIST_FOREACH(np, &boids[i].tailsHead, pointers) {
+					glVertex3f(np->position.x, np->position.y, np->position.z);
+				}
+			glEnd();
+		glPopMatrix();
 	}
 }
 
-void draw_trace()
+void
+draw_trace()
 {
 		glColor3f(1.0, 0.0, 0.0);
-		glBegin(GL_LINES);
-			glVertex3f(-5, 0.0, 0.0);
-			glVertex3f(5, 0, 0);	
-		glEnd();
 }
 
-void display() 
+void
+display() 
 {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);		     // Clear Screen and Depth Buffer
 	glLoadIdentity();
@@ -310,7 +359,7 @@ void display()
 		r2 = MatchVelocity(&boids[i]);
 		r3 = KeepDistance(&boids[i]);
 
-
+		DetermineNewTracePos(&boids[i]);
 
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r0, 1.0);
 		// Add r1 to velocity
@@ -319,14 +368,19 @@ void display()
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r2, 1.0);
 		// Add r3 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r3, 1.0);
-	
+
 		LimitSpeed(&boids[i]);
 		// Apply velocity to position
 		VectorAdd(&boids[i].position, &boids[i].position, &boids[i].velocity, 1.0);
 		
 	}
 
+	if (tailCount < TAIL_LENGTH) 
+		tailCount++;
+
 	// Draw a floor
+        glEnable(GL_LIGHTING);
+        glEnable(GL_LIGHT0); 
 	glColor3f(2.0, 1.0, 0.0);
 	glBegin(GL_QUADS);
 		glVertex3f(-BOUNDS, -BOUNDS, -BOUNDS);
@@ -350,6 +404,11 @@ void display()
 	
 	
 	Translation += 0.01;
+		
+	free(r0);
+	free(r1);
+	free(r2);
+	free(r3);
 
 	glutSwapBuffers();
 }
@@ -362,7 +421,7 @@ void initialize ()
     glMatrixMode(GL_PROJECTION);												// set matrix mode
     glLoadIdentity();															// reset projection matrix
     GLfloat aspect = (GLfloat) win.width / win.height;
-	gluPerspective(win.field_of_view_angle, aspect, win.z_near, win.z_far);		// set up a perspective projection matrix
+    gluPerspective(win.field_of_view_angle, aspect, win.z_near, win.z_far);		// set up a perspective projection matrix
     glMatrixMode(GL_MODELVIEW);													// specify which matrix is the current matrix
     glShadeModel( GL_SMOOTH );
     glClearDepth( 1.0f );														// specify the clear value for the depth buffer
@@ -370,7 +429,7 @@ void initialize ()
     glDepthFunc( GL_LEQUAL );
     glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST );						// specify implementation-specific hints
 
-	GLfloat amb_light[] = { 0.1, 0.1, 0.1, 1.0 };
+    GLfloat amb_light[] = { 0.1, 0.1, 0.1, 1.0 };
     GLfloat diffuse[] = { 0.6, 0.6, 0.6, 1 };
     GLfloat specular[] = { 0.7, 0.7, 0.3, 1 };
     glLightModelfv( GL_LIGHT_MODEL_AMBIENT, amb_light );
@@ -382,9 +441,7 @@ void initialize ()
     glLightModeli( GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE );
     glDepthFunc( GL_LEQUAL );
     glEnable( GL_DEPTH_TEST );
-    glEnable(GL_LIGHTING);
-    glEnable(GL_LIGHT0); 
-	glClearColor(0, 0, 0, 0);
+    glClearColor(0, 0, 0, 0);
 
 }
 
@@ -428,10 +485,8 @@ int main(int argc, char **argv)
 	glutDisplayFunc(display);									// register Display Function
 	glutTimerFunc(0, Timer, 0);
 //	glutIdleFunc( display );									// register Idle Function
-    glutKeyboardFunc( keyboard );								// register Keyboard Handler
+        glutKeyboardFunc( keyboard );								// register Keyboard Handler
 	initialize();
 	glutMainLoop();												// run GLUT mainloop
 	return 0;
 }
-
-
