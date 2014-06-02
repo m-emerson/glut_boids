@@ -6,7 +6,7 @@
 #include <soil.h>
 
 #define KEY_ESCAPE 27
-#define MAX_BOIDS 10 
+#define MAX_BOIDS 50
 #define BOUNDS 10 
 #define MAX_SPEED 0.5
 #define TAIL_LENGTH 20 
@@ -32,6 +32,10 @@ GLuint texture[0];
 int x = 0;
 int y = -BOUNDS * 2;
 
+// Amount of prey on screen
+int preyCount = 0;
+
+
 struct vector {
 	float x;
 	float y;
@@ -42,6 +46,15 @@ struct tails {
 	struct vector position;
 	LIST_ENTRY(tails) pointers;
 } tails;
+
+struct prey {
+	struct vector position;
+	float color[3];
+	LIST_ENTRY(prey) pointers;
+} prey;
+
+// Global linked list for prey
+LIST_HEAD(preysHead, prey) preysHead;
 
 struct boid {
 	struct vector position;
@@ -163,6 +176,45 @@ ProcessKeys(int key, int xx, int yy)
 	}
 }
 
+
+void
+AddPrey()
+{
+	preyCount++;
+	
+	struct prey *p = malloc(sizeof(struct prey));
+	p->position.x = RandomCoordinate() - 1;
+	p->position.y = RandomCoordinate() - 1;
+	p->position.z = RandomCoordinate() - 1;
+
+	p->color[0] = 1.0;
+	p->color[1] = 1.0;
+	p->color[2] = 1.0;
+
+	LIST_INSERT_HEAD(&preysHead, p, pointers);
+}
+
+void
+DrawPrey()
+{
+	struct prey *np;
+	LIST_FOREACH(np, &preysHead, pointers) {
+		glPushMatrix();
+		glColor3fv(np->color);	
+		glTranslatef(np->position.x, np->position.y, np->position.z);
+		glutSolidCube(0.5);
+		glPopMatrix();
+	}
+}
+
+void
+ProcessMouseButton(int button, int state, int x, int y)
+{
+	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+		AddPrey();
+	}
+}
+
 void
 DetermineNewTracePos(struct boid *b)
 {
@@ -188,9 +240,9 @@ void Init()
 	srand(time(NULL));
 	int i;	
 	for (i = 0; i < MAX_BOIDS; i++) {
-		boids[i].position.x = RandomCoordinate();
-		boids[i].position.y = RandomCoordinate();
-		boids[i].position.z = RandomCoordinate();
+		boids[i].position.x = RandomCoordinate(10);
+		boids[i].position.y = RandomCoordinate(10);
+		boids[i].position.z = RandomCoordinate(10);
 
 		boids[i].velocity.x = 0;
 		boids[i].velocity.y = 0;
@@ -203,6 +255,23 @@ void Init()
 		LIST_INIT(&boids[i].tailsHead);
 	}
 
+	// Initialised our linked list of preys
+	LIST_INIT(&preysHead);
+
+}
+
+struct vector *
+MoveTowardsGoal(struct boid *b)
+{
+	struct vector *v = malloc(sizeof(struct prey));
+
+	v->x = 0;
+	v->y = 0;
+	v->z = 0;	
+
+	// If there's no prey, don't affect the vector 
+	if (preyCount == 0)
+		return v;
 }
 
 struct vector *
@@ -348,11 +417,8 @@ draw_boids()
 		glDisable(GL_LIGHTING);
 		glDisable(GL_LIGHT0);
 
-		glPushMatrix();
-			glColor3f(1.0, 1.0, 1.0);
-			glutWireCube(BOUNDS * 2);
-		glPopMatrix();
-
+	
+		// Draw 
 		glPushMatrix();
 			glColor3fv(boids[i].color);
 			glLineWidth(1.0);
@@ -388,6 +454,7 @@ display()
 	struct vector *r1;
 	struct vector *r2;
 	struct vector *r3;
+	struct vector *r4;
 
 	for (i = 0; i < MAX_BOIDS; i++) {
 		r0 = StayWithinBounds(&boids[i]);
@@ -414,9 +481,17 @@ display()
 	if (tailCount < TAIL_LENGTH) 
 		tailCount++;
 
+	// Ensure lighting is enabled
+    	glEnable( GL_LIGHT0 );
+	glEnable( GL_LIGHTING );
+
+	// Draw any prey
+	glPushMatrix();
+		glColor3f(0.0, 0.0, 1.0);
+	glPopMatrix();
+
 	// Draw a floor
 	glColor3f(2.0, 1.0, 0.0);
-    	glEnable( GL_LIGHT0 );
     	glEnable( GL_COLOR_MATERIAL );
    	glEnable( GL_TEXTURE_2D );
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
@@ -429,11 +504,18 @@ display()
 	glEnd();
 	glDisable( GL_TEXTURE_2D );
 
-	// Shrub maybe?
-	glBegin(GL_POLYGON);
-	glEnd();
+	// Draw wire frame
+	glPushMatrix();
+		glColor3f(1.0, 1.0, 1.0);
+		glutWireCube(BOUNDS * 2);
+	glPopMatrix();
 
+	// Draw the boids
 	draw_boids();
+		
+	// Draw the prey
+	DrawPrey();
+
 
 	//avoid_walls();
 		//glRotatef(Rotation,0,1,0);						  // Multiply the current matrix by a rotation matrix 
@@ -495,7 +577,6 @@ initialize ()
    }
 }
 
-
 static void
 Timer(int value)
 {
@@ -521,7 +602,8 @@ int main(int argc, char **argv)
 	glutCreateWindow(win.title);								// create Window
 	glutDisplayFunc(display);									// register Display Function
 	glutTimerFunc(0, Timer, 0);
-        glutSpecialFunc( ProcessKeys );								// register Keyboard Handler
+        glutSpecialFunc(ProcessKeys);								// register Keyboard Handler
+	glutMouseFunc(ProcessMouseButton);
 	initialize();
 	glutMainLoop();												// run GLUT mainloop
 	
