@@ -1,19 +1,3 @@
-
-
-/*
- * OpenGLSamples (openglsamples.sf.net) tutorials
- * VC++ users should create a Win32 Console project and link 
- * the program with glut32.lib, glu32.lib, opengl32.lib
- *
- * GLUT can be downloaded from http://www.xmission.com/~nate/glut.html
- * OpenGL is by default installed on your system.
- * For an installation of glut on windows for MS Visual Studio 2010 see: http://nafsadh.wordpress.com/2010/08/20/glut-in-ms-visual-studio-2010-msvs10/
- *
- *
- * main.cpp		
- *
- */
-
 #include <sys/queue.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +6,7 @@
 #include <soil.h>
 
 #define KEY_ESCAPE 27
-#define MAX_BOIDS 50
+#define MAX_BOIDS 10 
 #define BOUNDS 10 
 #define MAX_SPEED 0.5
 #define TAIL_LENGTH 20 
@@ -45,7 +29,7 @@ int tailCount = 0;
 GLuint texture[0];
 
 // Initial camera position
-int x = -BOUNDS * 2;
+int x = 0;
 int y = -BOUNDS * 2;
 
 struct vector {
@@ -166,6 +150,17 @@ RandomCoordinate()
 	printf("%f\n", f_rand);
 	return f_rand;
 
+}
+
+void
+ProcessKeys(int key, int xx, int yy)
+{
+	switch(key) {
+		case GLUT_KEY_UP : y++; break;
+		case GLUT_KEY_DOWN: y--; break;
+		case GLUT_KEY_LEFT : x--; break;
+		case GLUT_KEY_RIGHT: x++; break;
+	}
 }
 
 void
@@ -354,6 +349,11 @@ draw_boids()
 		glDisable(GL_LIGHT0);
 
 		glPushMatrix();
+			glColor3f(1.0, 1.0, 1.0);
+			glutWireCube(BOUNDS * 2);
+		glPopMatrix();
+
+		glPushMatrix();
 			glColor3fv(boids[i].color);
 			glLineWidth(1.0);
 			glBegin(GL_LINES);
@@ -377,7 +377,7 @@ display()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);		     // Clear Screen and Depth Buffer
 	glLoadIdentity();
 	// Set camera centred at (0, -5.0, 1) with the z axis pointing up
-	gluLookAt( x, y, BOUNDS * 2.0, 0,0, (-BOUNDS / 2.0), 0,0,1);					  // Define a viewing transformation
+	gluLookAt( x, y, BOUNDS * 2.0, 0,0, (-BOUNDS / 2.0), 0,0,1);					  // Define a viewing transformati
 	
 	int i;
 	int vector = rand() % 10;
@@ -415,9 +415,9 @@ display()
 		tailCount++;
 
 	// Draw a floor
+	glColor3f(2.0, 1.0, 0.0);
     	glEnable( GL_LIGHT0 );
     	glEnable( GL_COLOR_MATERIAL );
-	glColor3f(2.0, 1.0, 0.0);
    	glEnable( GL_TEXTURE_2D );
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
 	glBindTexture(GL_TEXTURE_2D, texture[0]);
@@ -428,6 +428,10 @@ display()
 		glTexCoord2f(1, 0);	glVertex3f(BOUNDS, -BOUNDS, -BOUNDS);
 	glEnd();
 	glDisable( GL_TEXTURE_2D );
+
+	// Shrub maybe?
+	glBegin(GL_POLYGON);
+	glEnd();
 
 	draw_boids();
 
@@ -454,7 +458,8 @@ display()
 }
 
 
-void initialize () 
+void
+initialize () 
 {
     glMatrixMode(GL_PROJECTION);												// select projection matrix
     glViewport(0, 0, win.width, win.height);									// set the viewport
@@ -491,19 +496,6 @@ void initialize ()
 }
 
 
-void keyboard ( unsigned char key, int mousePositionX, int mousePositionY )		
-{ 
-  switch ( key ) 
-  {
-    case KEY_ESCAPE:        
-      exit ( 0 );   
-      break;      
-
-    default:      
-      break;
-  }
-}
-
 static void
 Timer(int value)
 {
@@ -516,7 +508,7 @@ int main(int argc, char **argv)
 	// set window values
 	win.width = 1000;
 	win.height = 1000;
-	win.title = "OpenGL/GLUT Window.";
+	win.title = "Boids 3D";
 	win.field_of_view_angle = 45;
 	win.z_near = 1.0f;
 	win.z_far = 500.0f;
@@ -529,8 +521,7 @@ int main(int argc, char **argv)
 	glutCreateWindow(win.title);								// create Window
 	glutDisplayFunc(display);									// register Display Function
 	glutTimerFunc(0, Timer, 0);
-//	glutIdleFunc( display );									// register Idle Function
-        glutKeyboardFunc( keyboard );								// register Keyboard Handler
+        glutSpecialFunc( ProcessKeys );								// register Keyboard Handler
 	initialize();
 	glutMainLoop();												// run GLUT mainloop
 	
