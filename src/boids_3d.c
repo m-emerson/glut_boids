@@ -19,12 +19,14 @@
 #include <stdlib.h>
 #include <GL/glut.h>	   // The GL Utility Toolkit (GLUT) Header
 #include <math.h>
+#include <soil.h>
 
 #define KEY_ESCAPE 27
 #define MAX_BOIDS 50
 #define BOUNDS 10 
 #define MAX_SPEED 0.5
-#define TAIL_LENGTH 10
+#define TAIL_LENGTH 20 
+
 typedef struct {
     int width;
 	int height;
@@ -40,6 +42,11 @@ float Rotation;
 float Translation = 0.01;
 float refresh = 50;
 int tailCount = 0;
+GLuint texture[0];
+
+// Initial camera position
+int x = -BOUNDS * 2;
+int y = -BOUNDS * 2;
 
 struct vector {
 	float x;
@@ -59,6 +66,35 @@ struct boid {
 	LIST_HEAD(tailsHead, tails) tailsHead;
 	struct vector tailPositions[10];
 } boids[MAX_BOIDS];
+
+int LoadGLTextures(char *filename)
+{
+	texture[0] = SOIL_load_OGL_texture
+	(	
+		filename,
+		SOIL_LOAD_AUTO,
+		SOIL_CREATE_NEW_ID,
+		SOIL_FLAG_INVERT_Y
+	);
+	
+	if (texture[0] == 0)
+		return 0;
+	
+    // Bind the texture to texture[0]
+	//glGenTextures(1, &texture[0]);
+	glBindTexture(GL_TEXTURE_2D, texture[0]);
+ 	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_REPEAT);
+	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_REPEAT);
+	return 1;
+}
+
+void FreeTexture()
+{
+	glDeleteTextures(1, &texture[0]);
+}
 
 // Multiplyer should be 1.0 or -1.0, so we can use this function for VectorMinus too
 void
@@ -341,7 +377,7 @@ display()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);		     // Clear Screen and Depth Buffer
 	glLoadIdentity();
 	// Set camera centred at (0, -5.0, 1) with the z axis pointing up
-	gluLookAt( -BOUNDS * 2.0, -BOUNDS * 2.0, BOUNDS * 2.0, 0,0, (-BOUNDS / 2.0), 0,0,1);					  // Define a viewing transformation
+	gluLookAt( x, y, BOUNDS * 2.0, 0,0, (-BOUNDS / 2.0), 0,0,1);					  // Define a viewing transformation
 	
 	int i;
 	int vector = rand() % 10;
@@ -379,15 +415,19 @@ display()
 		tailCount++;
 
 	// Draw a floor
-        glEnable(GL_LIGHTING);
-        glEnable(GL_LIGHT0); 
+    	glEnable( GL_LIGHT0 );
+    	glEnable( GL_COLOR_MATERIAL );
 	glColor3f(2.0, 1.0, 0.0);
+   	glEnable( GL_TEXTURE_2D );
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
+	glBindTexture(GL_TEXTURE_2D, texture[0]);
 	glBegin(GL_QUADS);
-		glVertex3f(-BOUNDS, -BOUNDS, -BOUNDS);
-		glVertex3f(-BOUNDS, BOUNDS, -BOUNDS);
-		glVertex3f(BOUNDS, BOUNDS, -BOUNDS);
-		glVertex3f(BOUNDS, -BOUNDS, -BOUNDS);
+		glTexCoord2f(0, 0);	glVertex3f(-BOUNDS, -BOUNDS, -BOUNDS);
+		glTexCoord2f(0, 1);	glVertex3f(-BOUNDS, BOUNDS, -BOUNDS);
+		glTexCoord2f(1, 1);	glVertex3f(BOUNDS, BOUNDS, -BOUNDS);
+		glTexCoord2f(1, 0);	glVertex3f(BOUNDS, -BOUNDS, -BOUNDS);
 	glEnd();
+	glDisable( GL_TEXTURE_2D );
 
 	draw_boids();
 
@@ -429,7 +469,8 @@ void initialize ()
     glDepthFunc( GL_LEQUAL );
     glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST );						// specify implementation-specific hints
 
-    GLfloat amb_light[] = { 0.1, 0.1, 0.1, 1.0 };
+    GLfloat blue[] = {0.0f, 0.0f, 0.1f, 1.0f};
+    GLfloat amb_light[] = { 0.2, 0.2, 0.2, 1.0 };
     GLfloat diffuse[] = { 0.6, 0.6, 0.6, 1 };
     GLfloat specular[] = { 0.7, 0.7, 0.3, 1 };
     glLightModelfv( GL_LIGHT_MODEL_AMBIENT, amb_light );
@@ -443,6 +484,10 @@ void initialize ()
     glEnable( GL_DEPTH_TEST );
     glClearColor(0, 0, 0, 0);
 
+    // Bind texture
+   if (LoadGLTextures("sand.jpg") == 0) {
+      printf("error loading sand texture");
+   }
 }
 
 
@@ -488,5 +533,6 @@ int main(int argc, char **argv)
         glutKeyboardFunc( keyboard );								// register Keyboard Handler
 	initialize();
 	glutMainLoop();												// run GLUT mainloop
+	
 	return 0;
 }
