@@ -20,10 +20,10 @@ GLint numObjects;
 GLenum linePoly = GL_FALSE;
 
 // Bounds for position
-int XMax = 300;
-int XMin = -300;
-int YMax = 300;
-int YMin = -300;
+int XMax = 500;
+int XMin = -500;
+int YMax = 500;
+int YMin = -500;
 
 // Global counter for amount of prey on screen
 int preyCount = 0;
@@ -364,7 +364,8 @@ MoveTowardsGoal(struct boid *b)
 	struct vector *v = malloc(sizeof(struct vector));
 
 	// For determining the closest prey
-	struct vector t;
+	struct vector t_closest; // Temporary for holding calculated values
+	struct vector t; // Temporary for holding calculated values
 	int preyIndex;
 
 	float diff_magnitude;
@@ -382,46 +383,37 @@ MoveTowardsGoal(struct boid *b)
 	struct prey *removePrey;
 	// Draw any prey
 
-	int init = 1;
+	struct prey *closest;
 
-	LIST_FOREACH(np, &preysHead, pointers) {
-	// For every prey that exists
-		if (init) {
-			// Get the first magnitude so we have something
-			// to compare to
-			VectorMinus(&t, &b->centre, &np->centre);
-			magnitude = GetMagnitude(&t);
-			init = 0;
-			removePrey = np;
-			continue;
-		}
-
-		VectorMinus(&t, &b->centre, &np->centre);
-		diff_magnitude = GetMagnitude(&t);
-		if (diff_magnitude < magnitude) {
-			v->x = t.x;
-			v->y = t.y;
-			magnitude = diff_magnitude;
-			removePrey = np;
-		}
-		
-	}
-
-	// If we are touching the prey, make it disappear
-	if (magnitude < 10) {
-		// Find the prey to remove and remove it
-		preyCount--;
-		LIST_FOREACH(np, &preysHead, pointers) {
-			if (removePrey  == np) {
-				LIST_REMOVE(np, pointers);
-			}
-		}
-	}
 	
-	// Closest prey is now in v
-	VectorMinus(v, v, &b->centre);
-	VectorDivide(v, v, 80.0);	
-	free(np);
+	int init = 1;
+	// Determine the closest
+	LIST_FOREACH(np, &preysHead, pointers) {
+		VectorMinus(&t, &b->centre, &np->centre);	
+		if (init) {
+			closest = np;
+			memcpy(&t_closest, &t, sizeof(struct vector));
+			init = 0;
+		} else {
+			if (GetMagnitude(&t) < GetMagnitude(&t_closest)) {
+				closest = np;
+				memcpy(&t_closest, &t, sizeof(struct vector));
+			}
+				
+		}
+	}
+
+	VectorMinus(v, &closest->centre, &b->centre);
+	VectorDivide(v, v, 100);
+	
+	// If we are touching the prey, make it disappear
+	if (GetMagnitude(&t_closest) < 10) {
+		preyCount--;
+		LIST_REMOVE(closest, pointers);
+	} 
+
+	// Free the memory of the closest from the list	
+	free(np); 
 	return v;
 	
 }
@@ -913,7 +905,7 @@ main(int argc, char **argv)
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE);
 	glutInitWindowSize(windW, windH);
-	glutCreateWindow("OpenGL Boids");
+	glutCreateWindow("OpenGL Boids 2D");
 	Init();
 	glutReshapeFunc(Reshape);
 	glutKeyboardFunc(Key);

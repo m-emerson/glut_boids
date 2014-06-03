@@ -77,8 +77,6 @@ int LoadGLTextures(char *filename)
 	if (texture[0] == 0)
 		return 0;
 	
-    // Bind the texture to texture[0]
-	//glGenTextures(1, &texture[0]);
 	glBindTexture(GL_TEXTURE_2D, texture[0]);
  	glTexEnvf( GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE );
 	glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
@@ -181,7 +179,6 @@ void
 AddPrey()
 {
 	preyCount++;
-	
 	struct prey *p = malloc(sizeof(struct prey));
 	p->position.x = RandomCoordinate() - 1;
 	p->position.y = RandomCoordinate() - 1;
@@ -265,13 +262,48 @@ MoveTowardsGoal(struct boid *b)
 {
 	struct vector *v = malloc(sizeof(struct prey));
 
+	struct vector t_closest; // Temporary for holding calculated values
+	struct vector t;
+
 	v->x = 0;
 	v->y = 0;
 	v->z = 0;	
 
+	struct prey *closest;
+	struct prey *np;
+
 	// If there's no prey, don't affect the vector 
 	if (preyCount == 0)
 		return v;
+
+	int init = 1;
+
+	LIST_FOREACH(np, &preysHead, pointers) {
+		VectorAdd(&t, &b->position, &np->position, -1.0);
+		if (init) {
+			/* First one will be the closest we have found so far */
+			closest = np;
+			memcpy(&t_closest, &t, sizeof(struct vector));
+			init = 0;
+		} else {
+			if (GetMagnitude(&t) < GetMagnitude(&t_closest)) {
+				closest = np;
+				memcpy(&t_closest, &t, sizeof(struct vector));
+			}
+		}
+	}
+	
+	VectorAdd(v, &closest->position, &b->position, -1.0);
+	VectorDivide(v, v, 100);
+
+	// If we are touching the prey (within 2 units magnitude), make it disappear
+	if (GetMagnitude(&t_closest) < 2) {	
+		preyCount--;
+		LIST_REMOVE(closest, pointers);
+	}
+	
+	return v;
+
 }
 
 struct vector *
@@ -461,6 +493,7 @@ display()
 		r1 = MoveTowardsCentre(&boids[i]);
 		r2 = MatchVelocity(&boids[i]);
 		r3 = KeepDistance(&boids[i]);
+		r4 = MoveTowardsGoal(&boids[i]);
 
 		DetermineNewTracePos(&boids[i]);
 
@@ -471,6 +504,8 @@ display()
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r2, 1.0);
 		// Add r3 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r3, 1.0);
+		// Add r4 to velocity
+		VectorAdd(&boids[i].velocity, &boids[i].velocity, r4, 1.0);
 
 		LimitSpeed(&boids[i]);
 		// Apply velocity to position
@@ -484,11 +519,6 @@ display()
 	// Ensure lighting is enabled
     	glEnable( GL_LIGHT0 );
 	glEnable( GL_LIGHTING );
-
-	// Draw any prey
-	glPushMatrix();
-		glColor3f(0.0, 0.0, 1.0);
-	glPopMatrix();
 
 	// Draw a floor
 	glColor3f(2.0, 1.0, 0.0);
@@ -510,11 +540,11 @@ display()
 		glutWireCube(BOUNDS * 2);
 	glPopMatrix();
 
+	// Draw the prey
+	DrawPrey();
 	// Draw the boids
 	draw_boids();
 		
-	// Draw the prey
-	DrawPrey();
 
 
 	//avoid_walls();
@@ -529,12 +559,11 @@ display()
 			glVertex3f(boids[i].b.x, boids[0].b.y, boids[0].b.z);*/
 	
 	
-	Translation += 0.01;
-		
 	free(r0);
 	free(r1);
 	free(r2);
 	free(r3);
+	free(r4);
 
 	glutSwapBuffers();
 }
@@ -589,23 +618,22 @@ int main(int argc, char **argv)
 	// set window values
 	win.width = 1000;
 	win.height = 1000;
-	win.title = "Boids 3D";
+	win.title = "OpenGL Boids 3D";
 	win.field_of_view_angle = 45;
 	win.z_near = 1.0f;
 	win.z_far = 500.0f;
 
-	// initialize and run program
-	glutInit(&argc, argv);                                      // GLUT initialization
+	glutInit(&argc, argv);
 	Init();
-	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH );  // Display Mode
-	glutInitWindowSize(win.width,win.height);					// set window size
-	glutCreateWindow(win.title);								// create Window
-	glutDisplayFunc(display);									// register Display Function
+	glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH );
+	glutInitWindowSize(win.width,win.height);
+	glutCreateWindow(win.title);
+	glutDisplayFunc(display);
 	glutTimerFunc(0, Timer, 0);
-        glutSpecialFunc(ProcessKeys);								// register Keyboard Handler
+        glutSpecialFunc(ProcessKeys);
 	glutMouseFunc(ProcessMouseButton);
 	initialize();
-	glutMainLoop();												// run GLUT mainloop
+	glutMainLoop();
 	
 	return 0;
 }
