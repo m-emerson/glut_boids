@@ -375,17 +375,13 @@ MoveTowardsGoal(struct boid *b)
 	v->x = 0;
 	v->y = 0;
 
-	// If there are no prey, there's no need to go towards it
+	// If there are no prey, there's no need to go towards it, return an empty vector
 	if (preyCount == 0)
 		return v;
 
 	struct prey *np;
-	struct prey *removePrey;
-	// Draw any prey
-
 	struct prey *closest;
 
-	
 	int init = 1;
 	// Determine the closest
 	LIST_FOREACH(np, &preysHead, pointers) {

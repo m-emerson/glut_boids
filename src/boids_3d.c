@@ -29,8 +29,7 @@ int tailCount = 0;
 GLuint texture[0];
 
 // Initial camera position
-int x = 0;
-int y = -BOUNDS * 2;
+int rotZ = 0;
 
 // Amount of prey on screen
 int preyCount = 0;
@@ -158,7 +157,6 @@ RandomCoordinate()
 		f_rand = f_rand * -1.0;
 	}
 
-	printf("%f\n", f_rand);
 	return f_rand;
 
 }
@@ -167,10 +165,8 @@ void
 ProcessKeys(int key, int xx, int yy)
 {
 	switch(key) {
-		case GLUT_KEY_UP : y++; break;
-		case GLUT_KEY_DOWN: y--; break;
-		case GLUT_KEY_LEFT : x--; break;
-		case GLUT_KEY_RIGHT: x++; break;
+		case GLUT_KEY_LEFT : rotZ--; break;
+		case GLUT_KEY_RIGHT: rotZ++; break;
 	}
 }
 
@@ -472,16 +468,15 @@ draw_trace()
 void
 display() 
 {
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);		     // Clear Screen and Depth Buffer
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glLoadIdentity();
-	// Set camera centred at (0, -5.0, 1) with the z axis pointing up
-	gluLookAt( x, y, BOUNDS * 2.0, 0,0, (-BOUNDS / 2.0), 0,0,1);					  // Define a viewing transformati
+	// Set camera centred at (0, -40, BOUNDS * 2.0) with the z axis pointing up
+	gluLookAt( 0, -40, BOUNDS * 2.0, 0,0, (-BOUNDS / 2.0), 0,0,1);
+
+	// Rotate around the z axis if left/right has been pressed
+	glRotatef(-rotZ, 0.0, 0, 1.0f);
 	
 	int i;
-	int vector = rand() % 10;
-	vector = vector * -1;
-	//move_towards_centre();
-
 	struct vector *r0;
 	struct vector *r1;
 	struct vector *r2;
@@ -497,22 +492,22 @@ display()
 
 		DetermineNewTracePos(&boids[i]);
 
+		/* Add each rule to the velocity */
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r0, 1.0);
-		// Add r1 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r1, 1.0);
-		// Add r2 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r2, 1.0);
-		// Add r3 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r3, 1.0);
-		// Add r4 to velocity
 		VectorAdd(&boids[i].velocity, &boids[i].velocity, r4, 1.0);
 
+		/* Limit the speed */
 		LimitSpeed(&boids[i]);
-		// Apply velocity to position
+
+		/* Apply new velocity to the position */
 		VectorAdd(&boids[i].position, &boids[i].position, &boids[i].velocity, 1.0);
-		
 	}
 
+	/* Add to the current tail length if we have not yet reached the max tail length.
+	Otherwise, our length stays at 30 */
 	if (tailCount < TAIL_LENGTH) 
 		tailCount++;
 
@@ -520,18 +515,21 @@ display()
     	glEnable( GL_LIGHT0 );
 	glEnable( GL_LIGHTING );
 
-	// Draw a floor
+	// Set floor colour in case texture doesn't work
 	glColor3f(2.0, 1.0, 0.0);
+	// Enable textures
     	glEnable( GL_COLOR_MATERIAL );
    	glEnable( GL_TEXTURE_2D );
 	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
 	glBindTexture(GL_TEXTURE_2D, texture[0]);
+	// Draw the floor as a square, map the texture to each corner
 	glBegin(GL_QUADS);
 		glTexCoord2f(0, 0);	glVertex3f(-BOUNDS, -BOUNDS, -BOUNDS);
 		glTexCoord2f(0, 1);	glVertex3f(-BOUNDS, BOUNDS, -BOUNDS);
 		glTexCoord2f(1, 1);	glVertex3f(BOUNDS, BOUNDS, -BOUNDS);
 		glTexCoord2f(1, 0);	glVertex3f(BOUNDS, -BOUNDS, -BOUNDS);
 	glEnd();
+	// Disable textures for the rest of the rendering
 	glDisable( GL_TEXTURE_2D );
 
 	// Draw wire frame
@@ -544,21 +542,7 @@ display()
 	DrawPrey();
 	// Draw the boids
 	draw_boids();
-		
 
-
-	//avoid_walls();
-		//glRotatef(Rotation,0,1,0);						  // Multiply the current matrix by a rotation matrix 
-		// Face on
-		/*glBegin( GL_TRIANGLES );
-			glVertex3f(0.0, 1.0, 0.5f);
-			glVertex3f(-0.5, -0.5, 0.5f);
-			glVertex3f(0.5, -0.5, 0.5f);*/
-			/*glVertex3f(boids[i].b.x, boids[0].b.x, boids[0].b.z);
-			glVertex3f(boids[i].b.y, boids[0].b.y, boids[0].b.z);
-			glVertex3f(boids[i].b.x, boids[0].b.y, boids[0].b.z);*/
-	
-	
 	free(r0);
 	free(r1);
 	free(r2);
@@ -585,13 +569,14 @@ initialize ()
     glDepthFunc( GL_LEQUAL );
     glHint( GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST );						// specify implementation-specific hints
 
-    GLfloat blue[] = {0.0f, 0.0f, 0.1f, 1.0f};
     GLfloat amb_light[] = { 0.2, 0.2, 0.2, 1.0 };
     GLfloat diffuse[] = { 0.6, 0.6, 0.6, 1 };
     GLfloat specular[] = { 0.7, 0.7, 0.3, 1 };
+    GLfloat light_position[] = { 0.0, 0.0, BOUNDS, 0.0 };
     glLightModelfv( GL_LIGHT_MODEL_AMBIENT, amb_light );
     glLightfv( GL_LIGHT0, GL_DIFFUSE, diffuse );
     glLightfv( GL_LIGHT0, GL_SPECULAR, specular );
+    glLightfv( GL_LIGHT0, GL_POSITION, light_position);
     glEnable( GL_LIGHT0 );
     glEnable( GL_COLOR_MATERIAL );
     glShadeModel( GL_SMOOTH );

@@ -23,24 +23,6 @@ struct prey {
 	LIST_ENTRY(prey) pointers;
 } prey;
 
-struct slider {
-	// Lines for the slider
-	struct vector line_p1;
-	struct vector line_p2;
-
-	// Rectangle to slide
-	struct vector rect_p1;
-	struct vector rect_p2;
-} slider[1];
-
-struct triangle {
-	struct vector p1;
-	struct vector p2;
-	struct vector p3;
-
-	struct vector centre;
-} triangle;
-
 struct boid {
 	struct triangle t;
 	struct vector velocity;
